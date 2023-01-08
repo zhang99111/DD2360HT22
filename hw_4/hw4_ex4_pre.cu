@@ -46,7 +46,10 @@ void cputimer_stop(const char* info){
   double time = (1000000.0*(t_end.tv_sec-t_start.tv_sec) + t_end.tv_usec-t_start.tv_usec);
   printf("Timing - %s. \t\tElasped %.0f microseconds \n", info, time);
 }
-
+double cputimer_get() {
+    gettimeofday(&t_end, 0);
+    return (1000000.0 * (t_end.tv_sec - t_start.tv_sec) + t_end.tv_usec - t_start.tv_usec);
+}
 // Initialize the sparse matrix needed for the heat time step
 void matrixInit(double* A, int* ArowPtr, int* AcolIndx, int dimX,
     double alpha) {
@@ -184,7 +187,7 @@ int main(int argc, char **argv) {
 
   //@@ Insert code to allocate the buffer needed by cuSPARSE
   gpuCheck(cudaMalloc(&buffer, bufferSize));
-
+  double time = 0;
   // Perform the time step iterations
   for (int it = 0; it < nsteps; ++it) {
     //@@ Insert code to call cusparse api to compute the SMPV (sparse matrix multiplication) for
@@ -198,8 +201,9 @@ int main(int argc, char **argv) {
                     CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, buffer
                 )
         );
-        cputimer_stop("CUDA Sparse matrix multiplication");
-
+       // cputimer_stop("CUDA Sparse matrix multiplication");
+        cudaDeviceSynchronize();
+        time += cputimer_get();
     //@@ Insert code to call cublas api to compute the axpy routine using cuBLAS.
     //@@ This calculation corresponds to: temp = alpha * tmp + temp
     cublasCheck(cublasDaxpy_v2(cublasHandle, dimX, &alpha, tmp, 1, temp, 1));
@@ -211,7 +215,7 @@ int main(int argc, char **argv) {
     if (norm < 1e-4)
       break;
   }
-
+  printf("time spent in SpMV: %f\n", time);
   // Calculate the exact solution using thrust
   thrust::device_ptr<double> thrustPtr(tmp);
   thrust::sequence(thrustPtr, thrustPtr + dimX, tempLeft,
